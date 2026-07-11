@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL archive files
+__pycache__/
+*.py[cod]
+*$py.class
+.history/
+
+# Databases
+db.sqlite3
+db.sqlite3-journal
+
+# Environments and Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Django media and collected static assets
+media/
+staticfiles/
+static_cdn/
+
+# Logs
+*.log
+pip-log.txt
+
+# OS and IDE configurations
+.DS_Store
+.vscode/
+.idea/
