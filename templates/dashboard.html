@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}
+Dashboard
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center">
+    <h2> Welcome {{ request.user.get_full_name|default:request.user.username }}</h2>
+    <a href="{% url 'accounts:logout' %}" class="btn btn-danger"> Logout </a>
+</div>
+<hr>
+<div class="card">
+    <div class="card-body">
+        <h4>Enterprise AI Dashboard</h4>
+        <p>
+            Login successful.
+        </p>
+    </div>
+</div>
+
+{% endblock %}
