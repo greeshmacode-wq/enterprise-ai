@@ -1,7 +1,7 @@
 from django.contrib.auth.views import LogoutView
 from django.urls import path
 
-from .views import LoginView, DashboardView
+from apps.accounts.views.html_views import LoginView, DashboardView
 
 app_name = 'accounts'
 urlpatterns = [
