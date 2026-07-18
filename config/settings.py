@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'apps.accounts',
     'apps.documents',
     'apps.embeddings',
@@ -54,6 +56,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.accounts.authentication.middleware.JWTRefreshMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -152,6 +155,90 @@ REST_FRAMEWORK = {
     ),
 }
 
+from datetime import timedelta
+
 LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "accounts:dashboard"
 LOGOUT_REDIRECT_URL = "accounts:login"
+
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=2),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+}
+# Step 1: Alice Logs In (Day 1)
+    # Alice logs into your app. Your server gives her:
+    # Access Token A1 (Expires in 30 mins)
+    # Refresh Token R1 (Expires in 7 days)
+# Step 2: Alice's Access Token Expires (Day 2)
+    # 30 minutes later, Access Token A1 expires. Alice can't access the app anymore.
+    # Her app silently sends Refresh Token R1 to the server to ask for a new Access Token.
+    # Because ROTATE_REFRESH_TOKENS = True:
+    # The server says: "Here is your new Access Token A2. But wait, for security, I am also giving you a brand new Refresh Token R2."
+    # Because BLACKLIST_AFTER_ROTATION = True:
+    # The server says: *"Also, the Refresh Token R1 you just used is now dead (blacklisted). You can never use it again."*
+# 🚨 Step 3: The Hacker Attack (Why this is awesome)
+    # Let’s say a hacker named Eve stole a copy of Alice's Refresh Token R1 on Day 1.
+    # Because of your settings, here is what happens next:
+    # Alice uses R1 to get her new tokens. The server gives her A2 and R2, and blacklists R1.
+    # Eve (the hacker) tries to use the stolen R1 to get into Alice's account.
+    # The server checks its database, sees that R1 is on the Blacklist, and says: "REJECTED! This token is dead."
+    # Eve is blocked! Even though R1 technically had 6 days left before its natural expiration, it was killed the exact second Alice used it.
+
+# Ensure logs directory exists
+LOGS_DIR = BASE_DIR / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "DEBUG",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "filename": str(LOGS_DIR / "auth.log"),
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        # Our authentication modules
+        "apps.accounts": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        # Third-party loggers (keep at WARNING to reduce noise)
+        "django": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
+
+AUTH_EXCLUDED_URLS = {
+    "accounts:login",
+    "accounts:logout",
+    "accounts-api:api-login",
+    "accounts-api:api-token-refresh",
+    "admin:login",
+}
