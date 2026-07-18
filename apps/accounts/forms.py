@@ -1,5 +1,7 @@
 from django import forms
-from accounts.models import User
+
+from .models import User
+
 
 class LoginForm(forms.Form):
     username = forms.CharField(max_length=150,widget=forms.TextInput(attrs={ "class": "form-control",'placeholder': 'Username'}))

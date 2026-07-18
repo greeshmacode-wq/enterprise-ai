@@ -4,8 +4,8 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import FormView, TemplateView
 
-from .forms import LoginForm
-from .services import AuthenticationService
+from apps.accounts.forms import LoginForm
+from apps.accounts.services import AuthenticationService
 
 class LoginView(FormView):
     template_name = 'accounts/login.html'
@@ -17,11 +17,11 @@ class LoginView(FormView):
         password = form.cleaned_data['password']
         user = AuthenticationService.login_user(self.request, username, password)
         
-        if user is not None:
-            return super().form_valid(form) #If login succeeds -> redirect to success_url
-        else:
-            form.add_error(None, 'Invalid username or password')
+        if user is None:
+            form.add_error(None, "Invalid username or password")
             return self.form_invalid(form)
+
+        return super().form_valid(form) #If login succeeds -> redirect to success_url
         
-class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = "accounts/dashboard.html"
+class DashboardView(LoginRequiredMixin, TemplateView):  #protects the view from unauthenticated users. If an unauthenticated user tries to access the view, they will be redirected to the login page.
+    template_name = "accounts/dashboard.html"   #settings ->redirection LOGIN_URL = "accounts:login"
