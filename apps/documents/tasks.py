@@ -1,173 +1,101 @@
 import logging
-import uuid
 
+import tiktoken
 from celery import shared_task
-from django.contrib.auth.hashers import make_password
+from django.contrib.postgres.search import SearchVector
+from django.db import transaction
+from docx import Document as DocxDocument
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 
-from apps.documents.models import Document
-from apps.processing.models import DocumentChunk
+from apps.documents.embeddings import embed_documents
+from apps.documents.models import Document, DocumentChunk
 
 logger = logging.getLogger(__name__)
 
-
-def _get_file_extension(file_path: str) -> str:
-    """Return normalized file extension."""
-    ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
-    return ext
+CHUNK_SIZE_TOKENS = 500
+CHUNK_OVERLAP_TOKENS = 50
+TOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
 
 
-def _classify_file_type(ext: str):
-    """Map file extension to Document.TypeChoices."""
-    mapping = {
-        "pdf": Document.TypeChoices.PDF,
-        "docx": Document.TypeChoices.DOCX,
-        "csv": Document.TypeChoices.CSV,
-        "txt": Document.TypeChoices.TXT,
-    }
-    return mapping.get(ext, Document.TypeChoices.OTHER)
+class DocumentExtractionError(Exception):
+    """Raised when a document's text cannot be extracted from its file."""
 
 
-@shared_task(bind=True, max_retries=1, default_retry_delay=60)
-def process_document(self, document_id: int):
-    """
-    Celery task: process an uploaded document.
+def _extract_text(document: Document) -> str:
+    path = document.file.path
+    suffix = path.rsplit(".", 1)[-1].lower()
 
-    1. Extract text from the file
-    2. Split into chunks
-    3. Store chunks in DB
-    4. Update document status
-    5. (Later: generate embeddings)
+    if suffix == "pdf":
+        reader = PdfReader(path)
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    if suffix == "docx":
+        docx_file = DocxDocument(path)
+        return "\n".join(paragraph.text for paragraph in docx_file.paragraphs)
+    if suffix == "txt":
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    raise DocumentExtractionError(f"Unsupported file type: .{suffix}")
+
+
+@shared_task(bind=True, max_retries=3, time_limit=600, soft_time_limit=540)
+def process_document(self, document_id: int) -> None:
+    """Extract, chunk, and embed a Document's text into DocumentChunk rows.
+
+    Safe to re-run: existing chunks for the document are cleared before
+    recreating them, so a retried task never leaves partial/duplicate chunks.
     """
     try:
-        doc = Document.objects.get(id=document_id)
+        document = Document.objects.get(pk=document_id)
     except Document.DoesNotExist:
-        logger.error(f"process_document: Document id={document_id} not found")
+        logger.warning("process_document: Document %s no longer exists", document_id)
         return
 
-    logger.info(f"Processing document: {doc.title} (id={doc.id})")
-    doc.status = Document.StatusChoices.PROCESSING
-    doc.save(update_fields=["status", "updated_at"]) #. It tells the database to only update those specific columns,
+    document.status = Document.Status.PROCESSING
+    document.error_message = ""
+    document.save(update_fields=["status", "error_message"])
 
     try:
-        # 1. Extract text
-        file_path = doc.file.path
-        ext = _get_file_extension(doc.file.name)
+        text = _extract_text(document)
+        if not text.strip():
+            raise DocumentExtractionError("Extracted text is empty")
 
-        # Auto-classify file type
-        doc.file_type = _classify_file_type(ext)
-        doc.save(update_fields=["file_type"])
+        splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            encoding_name="cl100k_base",
+            chunk_size=CHUNK_SIZE_TOKENS,
+            chunk_overlap=CHUNK_OVERLAP_TOKENS,
+        )
+        pieces = splitter.split_text(text)
+        vectors = embed_documents(pieces)
 
-        raw_text = _extract_text(file_path, ext)
-
-        if not raw_text.strip():
-            raise ValueError("Extracted text is empty.")
-
-        # 2. Split into chunks (using LangChain's text splitter)
-        chunk_texts = _split_text(raw_text)
-
-        # 3. Store chunks in DB
-        chunks_to_create = []
-        for idx, chunk_text in enumerate(chunk_texts):
-            token_count = _estimate_tokens(chunk_text)
-            chunks_to_create.append(
+        with transaction.atomic():
+            DocumentChunk.objects.filter(document=document).delete()
+            chunks = [
                 DocumentChunk(
-                    uuid=uuid.uuid4(),
-                    document=doc,
-                    chunk_index=idx,
-                    content=chunk_text,
-                    token_count=token_count,
-                    # embedding will be set later by a separate task
+                    document=document,
+                    chunk_index=index,
+                    content=piece,
+                    token_count=len(TOKEN_ENCODING.encode(piece)),
+                    embedding=vector,
                 )
+                for index, (piece, vector) in enumerate(zip(pieces, vectors))
+            ]
+            DocumentChunk.objects.bulk_create(chunks, batch_size=100)
+            DocumentChunk.objects.filter(document=document).update(
+                search_vector=SearchVector("content", config="english")
             )
+            document.status = Document.Status.COMPLETED
+            document.save(update_fields=["status"])
 
-        DocumentChunk.objects.bulk_create(chunks_to_create) # If a document has 100 chunks, calling .save() inside the loop would result in 100 separate database queries. bulk_create sends all 100 chunks to the database in 1 single query. This makes the task 10x–50x faster.
-
-        # 4. Update document status
-        doc.status = Document.StatusChoices.READY
-        doc.page_count = len(chunk_texts)
-        doc.save(update_fields=["status", "page_count", "updated_at"])
-
-        logger.info(f"Document processed: {doc.title} → {len(chunk_texts)} chunks, "f"{sum(c.token_count for c in chunks_to_create)} tokens")
-
-    except Exception as e:
-        logger.exception(f"Failed to process document {doc.id}: {e}")
-        doc.status = Document.StatusChoices.ERROR
-        doc.error_message = str(e)
-        doc.save(update_fields=["status", "error_message", "updated_at"])
-
-        try:
-            raise self.retry(exc=e)
-        except Exception:
-            pass
-
-
-# ---------------------------------------------------------------------------
-# Text extraction helpers
-# ---------------------------------------------------------------------------
-
-def _extract_text(file_path: str, ext: str) -> str:
-    """Extract text from a file based on its extension."""
-    if ext == "pdf":
-        return _extract_pdf_text(file_path)
-    elif ext == "docx":
-        return _extract_docx_text(file_path)
-    elif ext == "csv":
-        return _extract_csv_text(file_path)
-    elif ext == "txt":
-        return _extract_txt_text(file_path)
-    else:
-        raise ValueError(f"Unsupported file type: .{ext}")
-
-
-def _extract_pdf_text(file_path: str) -> str:
-    from pypdf import PdfReader
-
-    reader = PdfReader(file_path)
-    pages = [page.extract_text() for page in reader.pages if page.extract_text()]
-    return "\n\n".join(pages)
-
-
-def _extract_docx_text(file_path: str) -> str:
-    from docx import Document as DocxDocument
-
-    doc = DocxDocument(file_path)
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
-
-
-def _extract_csv_text(file_path: str) -> str:
-    import csv
-
-    rows = []
-    with open(file_path, newline="", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            rows.append(", ".join(row))
-    return "\n".join(rows)
-
-
-def _extract_txt_text(file_path: str) -> str:
-    with open(file_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-# ---------------------------------------------------------------------------
-# Text splitting
-# ---------------------------------------------------------------------------
-
-def _split_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200):
-    """Split text into chunks using LangChain RecursiveCharacterTextSplitter."""
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=len,
-        separators=["\n\n", "\n", ". ", " ", ""],
-    )
-    return splitter.split_text(text)
-
-
-def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~4 chars per token."""
-    return len(text) // 4
+    except DocumentExtractionError as exc:
+        document.status = Document.Status.FAILED
+        document.error_message = str(exc)
+        document.save(update_fields=["status", "error_message"])
+        logger.warning("process_document failed for %s: %s", document_id, exc)
+    except Exception as exc:
+        document.status = Document.Status.FAILED
+        document.error_message = "Unexpected error during processing"
+        document.save(update_fields=["status", "error_message"])
+        logger.exception("process_document crashed for document %s", document_id)
+        raise self.retry(exc=exc, countdown=60)

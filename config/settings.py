@@ -11,24 +11,23 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+import environ
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env(DEBUG=(bool, False))
+environ.Env.read_env(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-%iyx3!h1(%-q=0))4g+vmtt0ro@v0$3oihlxt*%0l@zjd*5s#t'
+SECRET_KEY = env("SECRET_KEY")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
 
 # Application definition
@@ -42,12 +41,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
+    'django.contrib.postgres',
     'apps.accounts',
     'apps.documents',
-    'apps.embeddings',
     'apps.chat',
     'apps.search',
-    'apps.common',
+    'apps.evaluation',
 ]
 
 MIDDLEWARE = [
@@ -87,11 +86,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT"),
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": env("DB_HOST"),
+        "PORT": env.int("DB_PORT", default=5432),
     }
 }
 
@@ -153,6 +152,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "20/min",     # Limit for anonymous visitors
+        "user": "300/min",    # Limit for authenticated users
+        "document-upload": "10/hour",  # Limit for document uploads
+        "chat": "30/min",     # Limit for chat interactions
+    },
 }
 
 from datetime import timedelta
@@ -181,7 +190,7 @@ SIMPLE_JWT = {
     # The server says: "Here is your new Access Token A2. But wait, for security, I am also giving you a brand new Refresh Token R2."
     # Because BLACKLIST_AFTER_ROTATION = True:
     # The server says: *"Also, the Refresh Token R1 you just used is now dead (blacklisted). You can never use it again."*
-# 🚨 Step 3: The Hacker Attack (Why this is awesome)
+#  Step 3: The Hacker Attack (Why this is awesome)
     # Let’s say a hacker named Eve stole a copy of Alice's Refresh Token R1 on Day 1.
     # Because of your settings, here is what happens next:
     # Alice uses R1 to get her new tokens. The server gives her A2 and R2, and blacklists R1.
@@ -234,6 +243,16 @@ LOGGING = {
         },
     },
 }
+
+# ---------------------------------------------------------------------------
+# Celery Configuration
+# ---------------------------------------------------------------------------
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
 
 AUTH_EXCLUDED_URLS = {
     "accounts:login",

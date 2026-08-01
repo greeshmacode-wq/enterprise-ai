@@ -1,12 +1,10 @@
+# apps/documents/urls/api_urls.py
 from django.urls import path
 
-from apps.documents.views.api_views import DocumentDetailAPIView,DocumentListAPIView,DocumentUploadAPIView
-
+from apps.documents.views.api_views import DocumentUploadView
 
 app_name = "api-documents"
 
 urlpatterns = [
-    path("upload/", DocumentUploadAPIView.as_view(), name="api-document-upload"),
-    path("", DocumentListAPIView.as_view(), name="api-document-list"),
-    path("<uuid:uuid>/", DocumentDetailAPIView.as_view(), name="api-document-detail"),
+    path("upload/", DocumentUploadView.as_view(), name="document-upload"),
 ]
