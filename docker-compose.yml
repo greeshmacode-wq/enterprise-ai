@@ -1,0 +1,37 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: enterprise-ai-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: enterprise_ai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: greeshma457
+    ports:
+      - "5433:5432"
+    volumes:
+      - enterprise-ai-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: enterprise-ai-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - enterprise-ai-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  enterprise-ai-pgdata:
+    external: true
+  enterprise-ai-redisdata:

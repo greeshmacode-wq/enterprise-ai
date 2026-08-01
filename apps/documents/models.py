@@ -1,3 +1,71 @@
-from django.db import models
+import uuid
 
-# Create your models here.
+from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVectorField
+from django.db import models
+from pgvector.django import HnswIndex, VectorField
+
+from apps.documents.embeddings import EMBEDDING_DIMENSIONS
+
+
+def document_upload_path(instance: "Document", filename: str) -> str:
+    return f"documents/{instance.department or 'general'}/{uuid.uuid4()}_{filename}"
+
+
+class Document(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+        
+    uuid= models.UUIDField(unique=True,default=uuid.uuid4,editable=False)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,related_name="documents",)
+    title = models.CharField(max_length=255)
+    file = models.FileField(upload_to=document_upload_path)
+    department = models.CharField(max_length=120, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "documents"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class DocumentChunk(models.Model):
+    uuid= models.UUIDField(unique=True,default=uuid.uuid4,editable=False)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="chunks")
+    chunk_index = models.PositiveIntegerField()
+    content = models.TextField()
+    token_count = models.PositiveIntegerField()
+    search_vector = SearchVectorField(null=True)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "document_chunks"
+        ordering = ["document_id", "chunk_index"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["document", "chunk_index"], name="unique_chunk_per_document"
+            )
+        ]
+        indexes = [
+            GinIndex(fields=["search_vector"], name="chunk_search_vector_gin"),
+            HnswIndex(
+                name="chunk_embedding_hnsw",
+                fields=["embedding"],
+                m=16,
+                ef_construction=64,
+                opclasses=["vector_cosine_ops"],
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.document_id}:{self.chunk_index}"

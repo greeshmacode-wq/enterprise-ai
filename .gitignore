@@ -30,3 +30,5 @@ pip-log.txt
 .DS_Store
 .vscode/
 .idea/
+
+postman/
