@@ -25,6 +25,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY")
 
+
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
@@ -161,6 +162,7 @@ REST_FRAMEWORK = {
         "user": "300/min",    # Limit for authenticated users
         "document-upload": "10/hour",  # Limit for document uploads
         "chat": "30/min",     # Limit for chat interactions
+        "search": "60/min",  # Limit for search queries
     },
 }
 

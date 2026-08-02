@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.documents.models import Document
 
-ALLOWED_EXTENSIONS = {"pdf", "docx", "txt"}
+ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "csv"}
 
 
 class DocumentUploadSerializer(serializers.ModelSerializer):
