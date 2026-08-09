@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import Q, QuerySet
 from pgvector.django import CosineDistance
@@ -5,6 +6,11 @@ from pgvector.django import CosineDistance
 from apps.accounts.models import User
 from apps.documents.embeddings import embed_query
 from apps.documents.models import DocumentChunk
+
+@dataclass
+class SearchResult:
+    chunk: DocumentChunk
+    score: float
 
 RRF_K = 60
 CANDIDATES_PER_METHOD = 50
