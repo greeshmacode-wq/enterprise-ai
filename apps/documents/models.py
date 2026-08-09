@@ -24,9 +24,9 @@ class Document(models.Model):
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,related_name="documents",)
     title = models.CharField(max_length=255)
     file = models.FileField(upload_to=document_upload_path)
-    department = models.CharField(max_length=120, blank=True)
+    department = models.CharField(max_length=120, blank=True) # used to filter documents by department in the UI , user cant see other departments documnets, they can only see their own department documents
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    error_message = models.TextField(blank=True)
+    error_message = models.TextField(blank=True) # to show the errors in the UI if the document processing fails, so that the user can understand what went wrong
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
