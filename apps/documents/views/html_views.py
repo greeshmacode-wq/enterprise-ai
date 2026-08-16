@@ -36,7 +36,7 @@ class DocumentUploadView(LoginRequiredMixin, FormView):
         document.department = self.request.user.department  # department="Finance", department = "Engineering"
         document.save()
 
-        process_document.delay(document.id)
+        process_document.delay(document.id) #{"task": "apps.documents.tasks.process_document", "id": "<random-uuid>", "args": [5], "kwargs": {}}  publishes it to Redis at CELERY_BROKER_URL, on Celery's default queue (literally named "celery").
         logger.info("Document %s uploaded by %s, queued for processing", document.id, self.request.user.first_name)
         messages.success(self.request, f'"{document.title}" uploaded - processing now.')
-        return super().form_valid(form)
+        return super().form_valid(form) # redirect to success_url
