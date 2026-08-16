@@ -58,12 +58,15 @@ class DocumentChunk(models.Model):
         ]
         indexes = [
             GinIndex(fields=["search_vector"], name="chunk_search_vector_gin"),
+            # HNSW = a graph that connects each chunk's vector to its nearest
+            # neighbors, so searching means hopping toward the query vector
+            # instead of checking every single chunk in the table.
             HnswIndex(
                 name="chunk_embedding_hnsw",
                 fields=["embedding"],
-                m=16,
-                ef_construction=64,
-                opclasses=["vector_cosine_ops"],
+                m=16,  # how many neighbors each vector connects to - more = more accurate search, but bigger index and slower to build
+                ef_construction=64,  # how hard it looks for good neighbors while building the graph - more = better quality graph, but slower to build (only affects build time, not search time)
+                opclasses=["vector_cosine_ops"],  # which distance formula this index is built for - cosine (direction of the vector) - must match CosineDistance(...) used in apps/search/services.py, or the index won't get used
             ),
         ]
 
