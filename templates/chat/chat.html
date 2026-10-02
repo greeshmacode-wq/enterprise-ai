@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}
+Chat
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center">
+    <h2>Ask the Assistant</h2>
+    <a href="{% url 'accounts:dashboard' %}" class="btn btn-outline-secondary">Back to Dashboard</a>
+</div>
+<hr>
+
+<div class="card">
+    <div id="messages" class="card-body" style="height: 55vh; overflow-y: auto;"></div>
+    <div class="card-footer">
+        <div id="status" class="text-muted small mb-2" style="min-height: 1.2em;"></div>
+        <form id="chat-form" class="d-flex gap-2">
+            <input type="text"
+                id="query-input"
+                class="form-control"
+                placeholder="Ask about your documents..."
+                autocomplete="off"
+                required
+            >
+            <button type="submit" id="send-button" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+</div>
+
+<script>
+const LLM_SERVICE_URL = "{{ llm_service_url }}";
+
+const messagesEl = document.getElementById("messages");
+const statusEl = document.getElementById("status");
+const formEl = document.getElementById("chat-form");
+const inputEl = document.getElementById("query-input");
+const sendButtonEl = document.getElementById("send-button");
+
+function appendMessage(role, text) {
+    const wrapper = document.createElement("div");
+    wrapper.className = `d-flex mb-2 ${role === "user" ? "justify-content-end" : "justify-content-start"}`;
+    const bubble = document.createElement("div");
+    bubble.className = `p-2 rounded ${role === "user" ? "bg-primary text-white" : "bg-light"}`;
+    bubble.style.maxWidth = "75%";
+    bubble.style.whiteSpace = "pre-wrap";
+    bubble.textContent = text;
+    wrapper.appendChild(bubble);
+    messagesEl.appendChild(wrapper);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return bubble;
+}
+
+async function fetchToken() {
+    const response = await fetch("{% url 'accounts:current-token' %}", { credentials: "same-origin" });
+    if (!response.ok) {
+        throw new Error("Could not get an auth token - try logging in again.");
+    }
+    const data = await response.json();
+    return data.access;
+}
+
+async function streamAnswer(query) {
+    const token = await fetchToken();
+
+    const response = await fetch(`${LLM_SERVICE_URL}/chat/stream`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok || !response.body) {
+        throw new Error(`The assistant service returned an error (${response.status}).`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let assistantBubble = null;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop();
+
+        for (const rawEvent of events) {
+            let eventType = "message";
+            let dataLine = "";
+            for (const line of rawEvent.split("\n")) {
+                if (line.startsWith("event: ")) eventType = line.slice(7);
+                if (line.startsWith("data: ")) dataLine = line.slice(6);
+            }
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine);
+
+            // Only the answer is shown: tool_start and sources events are ignored.
+            if (eventType === "token") {
+                if (!assistantBubble) {
+                    statusEl.textContent = "";
+                    assistantBubble = appendMessage("assistant", "");
+                }
+                assistantBubble.textContent += payload.content;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (eventType === "error") {
+                statusEl.textContent = "";
+                appendMessage("assistant", `Error: ${payload.detail}`);
+            } else if (eventType === "done") {
+                statusEl.textContent = "";
+                // Hide citation markers like [1] or [1, 2]; they're still saved with the message.
+                if (assistantBubble) {
+                    assistantBubble.textContent = assistantBubble.textContent.replace(/ ?\[\d+(?:\s*,\s*\d+)*\]/g, "");
+                }
+            }
+        }
+    }
+}
+
+formEl.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const query = inputEl.value.trim();
+    console.log("User query:", query);
+    if (!query) return;
+
+    appendMessage("user", query);
+    inputEl.value = "";
+    inputEl.disabled = true;
+    sendButtonEl.disabled = true;
+    statusEl.textContent = "Thinking...";
+
+    try {
+        await streamAnswer(query);
+    } catch (err) {
+        statusEl.textContent = "";
+        appendMessage("assistant", `Error: ${err.message}`);
+    } finally {
+        inputEl.disabled = false;
+        sendButtonEl.disabled = false;
+        inputEl.focus();
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+[
+  {
+    "question": "How do I avoid N+1 queries in Django?",
+    "expected_document": "django",
+    "expected_text": "select_related"
+  },
+  {
+    "question": "Why is looping over related objects slow in the ORM?",
+    "expected_document": "django",
+    "expected_text": "N+1"
+  },
+  {
+    "question": "Should I catch specific exceptions instead of a bare except?",
+    "expected_document": "django",
+    "expected_text": "Catch specific exceptions"
+  },
+  {
+    "question": "How do I get an API key for VoyageAI?",
+    "expected_document": "voyage",
+    "expected_text": "API key"
+  },
+  {
+    "question": "Steps to sign up and create credentials on Voyage",
+    "expected_document": "voyage",
+    "expected_text": "Sign up"
+  },
+  {
+    "question": "What is the difference between == and === in JavaScript?",
+    "expected_document": "js",
+    "expected_text": "=="
+  },
+  {
+    "question": "localStorage vs sessionStorage in the browser",
+    "expected_document": "js",
+    "expected_text": "LocalStorage"
+  }
+]
