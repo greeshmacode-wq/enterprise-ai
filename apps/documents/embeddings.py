@@ -14,7 +14,7 @@ QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 
 
 
-#This loads the embedding model once and reuses it, instead of reloading it every time it's needed.
+#This loads the embedding model once and reuses it, instead of reloading it every time it's needed.lru_cache is used to cache the embedding model.
 @lru_cache(maxsize=1) #maxsize=1 means it only ever remembers one result 
 def _get_model() -> SentenceTransformer:
     return SentenceTransformer(EMBEDDING_MODEL_NAME)
