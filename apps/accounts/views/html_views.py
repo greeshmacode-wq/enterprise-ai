@@ -1,11 +1,14 @@
 import logging
 
-from django.shortcuts import render
 from django.contrib.auth.mixins import LoginRequiredMixin #protects the view from unauthenticated users. If an unauthenticated user tries to access the view, they will be redirected to the login page.
+from django.http import JsonResponse
+from django.shortcuts import render
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.views import View
 from django.views.generic import FormView, TemplateView
 
+from apps.accounts.authentication.session_service import SessionService
 from apps.accounts.forms import LoginForm
 from apps.accounts.services import AuthenticationService
 
@@ -36,3 +39,21 @@ class LoginView(FormView):
 
 class DashboardView(LoginRequiredMixin, TemplateView):  #protects the view from unauthenticated users. If an unauthenticated user tries to access the view, they will be redirected to the login page.
     template_name = "accounts/dashboard.html"   #settings ->redirection LOGIN_URL = "accounts:login"
+
+
+class CurrentTokenView(LoginRequiredMixin, View):
+    """Hands the browser-side chat page the JWT already sitting in this
+    user's Django session, so it can call llm_service (a separate
+    process/port) directly without a second login. Session-authenticated,
+    not JWT-authenticated - by definition the caller doesn't have the
+    token yet, that's the whole point of this endpoint. Safe to expose:
+    it's the user's own token, from their own already-authenticated
+    session, never another user's. Runs after JWTRefreshMiddleware, so the
+    token returned is already refreshed if it had expired.
+    """
+
+    def get(self, request):
+        access_token = SessionService.get_access_token(request)
+        if access_token is None:
+            return JsonResponse({"detail": "No active session token."}, status=401)
+        return JsonResponse({"access": access_token})

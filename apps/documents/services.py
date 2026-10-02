@@ -8,7 +8,7 @@ from apps.documents.models import Document
 
 def visible_documents(user: User) -> QuerySet[Document]:
     """Mirrors the department-scoping rule in
-    apps.search.services._visible_chunks (admins see everything, everyone
+    apps.search.services.visible_chunks (admins see everything, everyone
     else sees their own department plus department-less docs), applied to
     Document rows directly. Needed separately because CSV datasets have no
     DocumentChunk rows to filter through - they skip chunking (see

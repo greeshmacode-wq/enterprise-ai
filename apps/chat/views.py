@@ -1,43 +1,18 @@
-import dataclasses
-
-from rest_framework import status
-from rest_framework.generics import GenericAPIView
-from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
-
-from apps.accounts.permissions import IsEmployeeOrAbove
-from apps.chat.agents import RAGAnswerError, generate_answer
-from apps.chat.models import Conversation, Message
-from apps.chat.serializers import ChatAnswerSerializer, ChatQuerySerializer
+from django.conf import settings
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.generic import TemplateView
 
 
-class ChatView(GenericAPIView):
-    permission_classes = [IsEmployeeOrAbove]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "chat"
-    serializer_class = ChatQuerySerializer
+class ChatPageView(LoginRequiredMixin, TemplateView):
+    """Renders the chat page shell only - no chat logic lives in Django.
+    The page's JS talks to llm_service (FastAPI) directly over SSE, per
+    the 2026-08-03 architecture decision that Django doesn't own the
+    conversational-AI bounded context.
+    """
 
-    def post(self, request):
-        query_serializer = self.get_serializer(data=request.data)
-        query_serializer.is_valid(raise_exception=True)
-        query = query_serializer.validated_data["query"]
+    template_name = "chat/chat.html"
 
-        try:
-            result = generate_answer(query, user=request.user)
-        except RAGAnswerError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        conversation = Conversation.objects.create(user=request.user, title=query[:255])
-        Message.objects.bulk_create(
-            [
-                Message(conversation=conversation, role=Message.Role.USER, content=query),
-                Message(
-                    conversation=conversation,
-                    role=Message.Role.ASSISTANT,
-                    content=result.answer,
-                    sources=[dataclasses.asdict(source) for source in result.sources],
-                ),
-            ]
-        )
-
-        return Response(ChatAnswerSerializer(result).data)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["llm_service_url"] = settings.LLM_SERVICE_URL
+        return context

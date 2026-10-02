@@ -13,9 +13,7 @@ class User(AbstractUser):
     employee_id = models.CharField(max_length=20, unique=True,blank=True,null=True)
     department= models.CharField(max_length=120,blank=True)
     designation = models.CharField(max_length=120,blank=True)
-    role = models.CharField(max_length=20,choices=RoleChoices.choices,
-        default=RoleChoices.EMPLOYEE,
-    )
+    role = models.CharField(max_length=20,choices=RoleChoices.choices,default=RoleChoices.EMPLOYEE,)
     def __str__(self):
         return self.get_full_name() or self.username
     

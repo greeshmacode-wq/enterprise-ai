@@ -158,7 +158,7 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "20/min",     # Limit for anonymous visitors
+        "anon": "20/min",     # Limit for anonymous visitors  20 requests/minute
         "user": "300/min",    # Limit for authenticated users
         "document-upload": "10/hour",  # Limit for document uploads
         "chat": "30/min",     # Limit for chat interactions
@@ -174,7 +174,7 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=2),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -243,6 +243,11 @@ LOGGING = {
             "level": "WARNING",
             "propagate": False,
         },
+        "llm_service": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
 
@@ -255,6 +260,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
+
+# ---------------------------------------------------------------------------
+# llm_service (FastAPI) - base URL the browser-side chat page talks to
+# directly, not proxied through Django.
+# ---------------------------------------------------------------------------
+LLM_SERVICE_URL = env("LLM_SERVICE_URL", default="http://localhost:8001")
 
 AUTH_EXCLUDED_URLS = {
     "accounts:login",
