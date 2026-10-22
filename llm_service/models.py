@@ -1,13 +1,3 @@
-"""SQLAlchemy models for the conversational-AI bounded context.
-
-Conversation/Message live here, not in Django's apps/chat: 
- FastAPI is the only service that ever
-writes these tables, so it owns their schema/migrations too. Table names
-are prefixed ai_ to avoid colliding with Django's existing `conversations`/
-`chat_messages` tables during the cutover - drop those once ChatView is
-retired and this is confirmed working, they aren't touched by this file.
-"""
-
 import uuid as uuid_lib
 from datetime import datetime
 

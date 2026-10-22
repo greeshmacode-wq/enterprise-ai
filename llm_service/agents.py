@@ -1,17 +1,3 @@
-"""Agentic RAG: a LangGraph ReAct agent that routes each query to a
-document-retrieval tool, a CSV/pandas tool, both, or neither.
-
-Lives in llm_service (not apps/chat) per the 2026-08-03 architecture
-decision: this is the conversational-AI bounded context, which FastAPI
-owns. Django ORM calls inside the tools (hybrid_search, RBAC-scoped CSV
-lookups) are bridged via asgiref's sync_to_async(thread_sensitive=False) -
-explicit, not implicit thread-dispatch, and thread_sensitive=False
-specifically because thread_sensitive=True would serialize every Django ORM
-call across ALL concurrent requests onto one shared thread outside of
-Django's own request/response cycle, which defeats the point of doing this
-asynchronously at all.
-"""
-
 import logging
 import re
 from dataclasses import dataclass

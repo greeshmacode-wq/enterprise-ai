@@ -1,5 +1,3 @@
-"""Read-side helpers for Document visibility."""
-
 from django.db.models import Q, QuerySet
 
 from apps.accounts.models import User

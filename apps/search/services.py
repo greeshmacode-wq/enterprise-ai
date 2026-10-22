@@ -42,7 +42,7 @@ def text_ranked_ids(query: str, visible: QuerySet[DocumentChunk]) -> list[int]:
     words = query.split()
     if not words:
         return []
-    text_query = reduce(or_, (SearchQuery(word, config="english") for word in words))
+    text_query = reduce(or_, (SearchQuery(word, config="english") for word in words)) # A | B | C
     return list(
         visible.filter(search_vector=text_query)
         .annotate(rank=SearchRank("search_vector", text_query)) #calculates a relevance score.
