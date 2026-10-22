@@ -31,7 +31,53 @@ services:
       timeout: 5s
       retries: 5
 
+  web:
+    build: .
+    container_name: enterprise-ai-web
+    restart: unless-stopped
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    env_file: .env
+    environment: &app-env
+      DB_HOST: db
+      DB_PORT: "5432"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes: &app-volumes
+      - media:/app/media
+      - hf-cache:/app/.cache/huggingface
+    depends_on: &app-deps
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: enterprise-ai-worker
+    restart: unless-stopped
+    command: celery -A config worker -l info
+    env_file: .env
+    environment: *app-env
+    volumes: *app-volumes
+    depends_on: *app-deps
+
+  llm:
+    build: .
+    container_name: enterprise-ai-llm
+    restart: unless-stopped
+    command: sh -c "cd llm_service && alembic upgrade head && cd .. && uvicorn llm_service.main:app --host 0.0.0.0 --port 8001"
+    env_file: .env
+    environment: *app-env
+    ports:
+      - "8001:8001"
+    volumes: *app-volumes
+    depends_on: *app-deps
+
 volumes:
   enterprise-ai-pgdata:
-    external: true
+    name: enterprise-ai-pgdata
   enterprise-ai-redisdata:
+  media:
+  hf-cache:

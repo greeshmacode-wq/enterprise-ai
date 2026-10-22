@@ -121,8 +121,7 @@ ANTHROPIC_API_KEY=your-anthropic-api-key
 ### 3. Start PostgreSQL and Redis
 
 ```bash
-docker volume create enterprise-ai-pgdata
-docker compose up -d
+docker compose up -d db redis
 ```
 
 ### 4. Run the database migrations
@@ -147,6 +146,15 @@ uvicorn llm_service.main:app --port 8001 --reload
 ```
 
 Open **http://localhost:8000**, log in, upload documents, then go to **Chat**.
+
+### Or run everything with Docker
+
+After creating `.env` (step 2), one command starts PostgreSQL, Redis, Django, Celery and FastAPI. Migrations run automatically.
+
+```bash
+docker compose up -d --build
+docker compose exec web python manage.py createsuperuser
+```
 
 ---
 
@@ -181,4 +189,3 @@ Answer quality (Ragas) runs through the FastAPI evaluation endpoint, and the res
 - Re-ranking model on top of hybrid search
 - Output guardrails (checking answers, not just questions)
 - Caching for frequent queries
-- Full Docker setup for all services
