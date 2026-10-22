@@ -1,11 +1,3 @@
-"""FastAPI AI service: owns the conversational-AI bounded context
-(Conversation/Message on its own schema, the LangGraph agent, SSE
-streaming) per the 2026-08-03 architecture decision. django.setup() below
-is only for reaching into the RBAC-scoped retrieval/CSV logic Django still
-owns (apps.search, apps.documents) - never for Conversation/Message, which
-live in llm_service/models.py now, on their own Alembic-migrated schema.
-"""
-
 import json
 import logging
 import os
@@ -112,12 +104,6 @@ async def _save_assistant_message(
 
 
 async def _stream_answer(query: str, user: User) -> AsyncIterator[str]:
-    """True async generator - every Django/pandas touchpoint inside
-    build_agent()/the tools is already bridged through sync_to_async, so
-    nothing here blocks the event loop. StreamingResponse detects an async
-    generator and consumes it directly - no thread-pool dispatch needed,
-    unlike the sync-generator version this replaces.
-    """
     guard_result = await check_input(query)
     if guard_result.blocked:
         logger.warning("Blocked query from user %s: %r (%s)", user.uuid, query, guard_result.reason)
@@ -242,13 +228,6 @@ async def chat_answer(
 async def evaluation_run(
     payload: EvaluationRunRequest, _user: User = Depends(get_manager_or_above_user)
 ) -> list[EvaluationResult]:
-    """Score up to `limit` not-yet-evaluated assistant messages (only ones
-    answered via retrieve_documents - see llm_service/evaluation.py's
-    module docstring for why CSV-tool answers are out of scope) and
-    persist the results. Runs inline, synchronously within the request -
-    each message costs two Claude judge calls (time and API cost), so keep
-    `limit` modest for an interactive call.
-    """
     return await run_evaluation(limit=payload.limit)
 
 

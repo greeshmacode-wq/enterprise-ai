@@ -1,15 +1,3 @@
-"""Input guardrail: a fast LLM-based safety/scope classifier that runs
-before a user's query reaches the RAG agent.
-
-Uses Anthropic directly (same provider as the answer-generating agent in
-agents.py) with forced tool-use, so the classification is a guaranteed
-structured object - not a hope-it-returns-valid-JSON text parse.
-
-Fails open (allows the query through) on any classifier error - a timeout
-or API outage should degrade to "unguarded", not take down chat entirely.
-Every fail-open path is logged so it's visible in practice, not silent.
-"""
-
 import logging
 
 import anthropic
@@ -32,7 +20,7 @@ _SYSTEM_PROMPT = (
     "greetings/small talk, and questions the assistant might not have "
     "documents for - lack of information is not a safety concern."
 )
-
+#forced tool-use so the safety classifier always returns structured data, a blocked boolean and a reason, instead of free text I'd have to parse.
 _CLASSIFY_TOOL = {
     "name": "classify",
     "description": "Report the safety classification of the user's message.",

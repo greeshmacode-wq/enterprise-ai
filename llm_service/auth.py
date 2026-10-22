@@ -1,8 +1,3 @@
-"""Shared FastAPI auth dependencies - split out from main.py so other
-modules (rate_limit.py) can depend on the authenticated user without a
-circular import back into main.py.
-"""
-
 from asgiref.sync import sync_to_async
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
